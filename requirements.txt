@@ -1,0 +1,5 @@
+openai
+fire
+toml
+slack-bolt
+slack-sdk

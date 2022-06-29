@@ -1,0 +1,5 @@
+
+[config]
+engine = "text-babbage-001"
+temperature = 0.70
+max_tokens = 150
