@@ -22,4 +22,5 @@ python slackbot.py
 ```
 
 Then just mention your bot & ask questions!
+
 ![Goofybot Example](assets/goofybot_example.png)
