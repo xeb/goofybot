@@ -1,5 +1,6 @@
 openai
 fire
 toml
+termcolor
 slack-bolt
 slack-sdk

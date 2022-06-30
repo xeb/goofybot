@@ -5,6 +5,7 @@ import re
 import fire
 import toml
 import openai
+from termcolor import colored
 from slack_bolt import App
 from slack_bolt.adapter.socket_mode import SocketModeHandler
 
@@ -35,7 +36,7 @@ def generate(prompt):
                 engine = config[key]
                 prompt = prompt.replace(f":{emoji}:", "").strip()
 
-    print(f"Using {prompt=}")
+    print(colored(f"Using {prompt=}", "cyan"))
     response = openai.Completion.create(
         engine=engine,
         prompt=prompt,
@@ -43,7 +44,8 @@ def generate(prompt):
         max_tokens=config["max_tokens"]
     )
 
-    print(f"Received {len(response.choices)=}")
+    print(colored(f"Received {len(response.choices)=}", "cyan"))
+    print(colored(f"Received {response.choices[0]=}", "cyan"))
     txt = response.choices[0].text
     return txt
 
@@ -52,7 +54,7 @@ def mention_handler_app_mention(body, say, logger):
     event = body["event"]
     thread_ts = event.get("thread_ts", None) or event["ts"]
     channel = event.get("channel", None) or event["channel"]
-    print(f"Handling {thread_ts}")
+    print(colored(f"--------- starting new thread -----\n{thread_ts=}", "green"))
     prompt = (
         event["text"].replace(event["text"].split(" ")[0].strip(), "").strip()
     )  # i feel dirty but its late
@@ -70,17 +72,20 @@ def mention_handler_app_mention(body, say, logger):
         say(f"To use me, just mention me with @Goofybot and type your question. You can put :fire: to increase my craziness (up to 4 times). To change the engine, you can use the following emoji's:\n\n {emoji_engines}", thread_ts=thread_ts)
         return
 
-    app.client.reactions_add(channel=channel, timestamp=thread_ts, name="thumbsup")
-    print(f"Generating {prompt=}")
+    app.client.reactions_add(channel=channel, timestamp=thread_ts, name="heavy_check_mark")
+    print(colored(f"Generating {prompt=}", "green"))
     try:
         response = generate(prompt)
         say(response, thread_ts=thread_ts)
     except Exception as e:
         say(f"Uhoh. Error {e=}", thread_ts=thread_ts)
+        print(colored(f"Error {e=}", "red"))
 
+    print(colored(f"--------- ending new thread -----", "green"))
 
 @app.event("message")
 def mention_handler_message(body, say):
+    print(colored(f"--------- starting message within a thread -----", "yellow"))
     event = body["event"]
     thread_ts = event.get("thread_ts", None) or event["ts"]
     messag_ts = event.get("ts", None)
@@ -91,26 +96,54 @@ def mention_handler_message(body, say):
     message = event["text"].strip()
     user = event.get("user", None)
 
-    print(f"{user=}\n{message=}\n{channel=}\n{thread_ts=}")
-    return # note I've disabled this until I can get the username parsing right & avoid a "double message"
+    #print(f"{dir(app.client)=}")
+    #current_user = app.client.users_info()
+    #current_user = app.client.users_identity()
+    current_user = ""
+
+    if "U03MM3WLXHT" in user: #TODO get app.client.users_identity() to work dynamically, stupid OAuth
+        print(colored(f"The message was from Goofybot, stopping", "yellow"))
+        return
+
+    if "U03SEPH39_" in user:
+        print(colored(f"The message was from Goofyboy I think {user=}, stopping", "yellow"))
+        return
+
+    print(colored(f"{user=}\n{channel=}\n{thread_ts=}\n{current_user=}", "yellow"))
+    #return # note I've disabled this until I can get the username parsing right & avoid a "double message"
     # I need to get the current user
 
     replies = app.client.conversations_replies(channel=channel, ts=thread_ts)
     history = ""
 
     for msg in replies["messages"]:
-        print(f"{msg=}")
         history = history + f"<@{msg['user']}> " + msg["text"] + "\n"
 
     history = history + f"<@{user}> " + message # we expect a new line at the end
-    print(f"{history=}")
+
+    # HACK: prevent responding to yourself
+    history_parts = history.split("\n")
+    if len(history_parts) == 2 and history_parts[0] == history_parts[1]:
+        print(colored("Duplicate! exiting", "yellow"))
+        return
+
+    if "U03MM3WLXHT" not in history:
+        print(colored(f"NOT RESPONDING!!! to {history=}, none of my business", "yellow"))
+        return
+
+    print(colored(f"{history=}", "yellow"))
 
     response = generate(history)
-    say(text=response, thread_ts=thread_ts)
+
+    if len(response) == 0 or response.strip() == "":
+        app.client.reactions_add(channel=channel, timestamp=messag_ts, name="shrug")
+    else:
+        say(text=response, thread_ts=thread_ts)
 
     if "GPT-3" in message:
         say(text="Did someone say GPT-3? That's me! Nice to meet you", thread_ts=thread_ts)
 
+    print(colored(f"--------- ending message within a thread -----", "yellow"))
 
 def main():
     handler = SocketModeHandler(app, SLACK_APP_TOKEN)
