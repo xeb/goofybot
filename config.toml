@@ -1,5 +1,7 @@
 
 [config]
-engine = "text-babbage-001"
+robot_face_engine = "text-davinci-002"
+default_engine = "text-babbage-001"
+older_man_engine = "davinci"
 temperature = 0.70
 max_tokens = 150
