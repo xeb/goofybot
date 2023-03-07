@@ -16,7 +16,7 @@ OPENAI_API_TOKEN = os.environ["OPENAI_APP_TOKEN"]
 openai.api_key = OPENAI_API_TOKEN
 app = App(token=SLACK_BOT_TOKEN)
 
-def generate(prompt):
+def generate(prompt, chat_history):
     config = toml.load("config.toml")["config"]
 
     additional_temp = prompt.count(":fire:") * 0.05
@@ -36,17 +36,30 @@ def generate(prompt):
                 engine = config[key]
                 prompt = prompt.replace(f":{emoji}:", "").strip()
 
-    print(colored(f"Using {prompt=}", "cyan"))
-    response = openai.Completion.create(
-        engine=engine,
-        prompt=prompt,
-        temperature=temperature,
-        max_tokens=config["max_tokens"]
+    #print(colored(f"Using {prompt=} {chat_history=}", "cyan"))
+    #response = openai.Completion.create(
+    #    engine=engine,
+    #    prompt=prompt,
+    #    temperature=temperature,
+    #    max_tokens=config["max_tokens"]
+    #)
+
+    system_msg = {"role":"system", "content":"You are Goofybot, a virtual assistant meant to entertain a group of immature 40 somethings with jokes and sarcasm. But you still need to tell the truth and be very helpful"}
+
+    messages = chat_history
+    messages.insert(0, system_msg)
+    response = openai.ChatCompletion.create(
+        model="gpt-3.5-turbo",
+        messages = messages,
     )
 
     print(colored(f"Received {len(response.choices)=}", "cyan"))
     print(colored(f"Received {response.choices[0]=}", "cyan"))
-    txt = response.choices[0].text
+    if engine != "gpt-3.5-turbo":
+        txt = response.choices[0].text
+    else:
+        txt = response.choices[0]['message']['content']
+
     return txt
 
 @app.event("app_mention")
@@ -72,10 +85,12 @@ def mention_handler_app_mention(body, say, logger):
         say(f"To use me, just mention me with @Goofybot and type your question. You can put :fire: to increase my craziness (up to 4 times). To change the engine, you can use the following emoji's:\n\n {emoji_engines}", thread_ts=thread_ts)
         return
 
+    chat_history = []
+    chat_history.append({"role":"user", "content": f"<@{event['user']}> " + prompt + "\n" })
     app.client.reactions_add(channel=channel, timestamp=thread_ts, name="heavy_check_mark")
     print(colored(f"Generating {prompt=}", "green"))
     try:
-        response = generate(prompt)
+        response = generate(prompt, chat_history)
         say(response, thread_ts=thread_ts)
     except Exception as e:
         say(f"Uhoh. Error {e=}", thread_ts=thread_ts)
@@ -114,12 +129,16 @@ def mention_handler_message(body, say):
     # I need to get the current user
 
     replies = app.client.conversations_replies(channel=channel, ts=thread_ts)
+
+    chat_history = []
     history = ""
 
     for msg in replies["messages"]:
         history = history + f"<@{msg['user']}> " + msg["text"] + "\n"
+        chat_history.append({"role":"user", "content": f"<@{msg['user']}> " + msg["text"] + "\n" })
 
     history = history + f"<@{user}> " + message # we expect a new line at the end
+    chat_history.append({"role":"user", "content": f"<@{msg['user']}> " + msg["text"] + "\n" })
 
     # HACK: prevent responding to yourself
     history_parts = history.split("\n")
@@ -131,9 +150,13 @@ def mention_handler_message(body, say):
         print(colored(f"NOT RESPONDING!!! to {history=}, none of my business", "yellow"))
         return
 
+    if history.count("U03MM3WLXHT") >= 300:
+        print(colored(f"NOT RESPONDING!!! I've been too chatty", "yellow"))
+        return
+
     print(colored(f"{history=}", "yellow"))
 
-    response = generate(history)
+    response = generate(history, chat_history)
 
     if len(response) == 0 or response.strip() == "":
         app.client.reactions_add(channel=channel, timestamp=messag_ts, name="shrug")

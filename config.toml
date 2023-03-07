@@ -1,7 +1,7 @@
 
 [config]
-robot_face_engine = "text-davinci-002"
-default_engine = "text-babbage-001"
+robot_face_engine = "text-davinci-003"
+default_engine = "gpt-3.5-turbo"
 older_man_engine = "davinci"
 temperature = 0.70
 max_tokens = 150
